@@ -1,0 +1,19 @@
+🔍 Testing API functionality...
+
+
+❌ User Registration
+   Error: 
+
+❌ User Login
+   Error: 
+
+❌ Web Scraping
+   Error: 
+
+❌ Credibility Checking
+   Error: 
+
+❌ Saved Articles
+   Skipped due to missing authentication token
+
+🔍 API Tests completed!

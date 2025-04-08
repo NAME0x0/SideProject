@@ -1,334 +1,396 @@
-import React, { useState, useContext } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    SafeAreaView,
-    Platform,
-    ScrollView,
-    ActivityIndicator,
-    Image
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { ToastContext } from '../App';
-import { SavedArticlesContext } from '../context/SavedArticlesContext';
+import { useApp } from '../context/AppContext';
+import ApiService from '../services/ApiService';
+import { showToast } from '../utils/ToastConfig';
+import LoadingOverlay from '../Components/LoadingOverlay';
 
-export default function URLSearchPage() {
-    const [url, setUrl] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState(null);
-    const showToast = useContext(ToastContext);
-    const savedArticlesContext = useContext(SavedArticlesContext);
+export default function URLSearchPage({ route, navigation }) {
+  const { initialUrl } = route.params || {};
+  const [url, setUrl] = useState(initialUrl || '');
+  const [isLoading, setIsLoading] = useState(false);
+  const [article, setArticle] = useState(null);
+  const [credibilityScore, setCredibilityScore] = useState(null);
+  const [error, setError] = useState(null);
+  
+  const { saveArticle, isArticleSaved, getCachedArticle, cacheArticle, getCachedCredibilityScore, cacheCredibilityScore } = useApp();
 
-    const handleVerify = async () => {
-        if (!url) {
-            showToast('Please enter a URL', 'error');
-            return;
+  useEffect(() => {
+    if (initialUrl) {
+      handleVerify();
+    }
+  }, [initialUrl]);
+
+  const handleVerify = async () => {
+    if (!url) {
+      showToast.validationError('Please enter a URL to verify');
+      return;
+    }
+
+    // Validate URL format
+    if (!url.match(/^(http|https):\/\/[^ "]+$/)) {
+      showToast.validationError('Please enter a valid URL starting with http:// or https://');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setArticle(null);
+    setCredibilityScore(null);
+
+    try {
+      // Check if article is cached
+      const cachedArticle = getCachedArticle(url);
+      const cachedScore = getCachedCredibilityScore(url);
+      
+      if (cachedArticle && cachedScore) {
+        // Use cached data
+        setArticle(cachedArticle);
+        setCredibilityScore(cachedScore);
+        showToast.info('Using Cached Data', 'Showing previously verified information');
+      } else {
+        // Fetch article data
+        const articleData = await ApiService.scrapeArticle(url);
+        
+        if (articleData.success) {
+          setArticle(articleData);
+          cacheArticle(url, articleData);
+          
+          // Fetch credibility score
+          const credibilityData = await ApiService.checkCredibility(articleData);
+          
+          if (credibilityData.success) {
+            setCredibilityScore(credibilityData.score);
+            cacheCredibilityScore(url, credibilityData.score);
+          } else {
+            throw new Error(credibilityData.message || 'Failed to verify article credibility');
+          }
+        } else {
+          throw new Error(articleData.message || 'Failed to extract article content');
         }
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred while verifying the article');
+      showToast.error('Verification Failed', err.message || 'Failed to verify the article');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-        setLoading(true);
-        try {
-            // Simulate API call - replace with your actual fake news detection API
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const mockResult = {
-                id: Date.now().toString(),
-                title: "Climate Change Report Raises Concerns",
-                source: "NewsDaily",
-                imageUrl: "https://picsum.photos/800/400",
-                timestamp: new Date().toLocaleString(),
-                url: url,
-                credibilityScore: 35,
-                factCheckSummary: "This article contains several misleading claims and unverified statistics.",
-                warningFlags: [
-                    "Misleading headlines",
-                    "Unverified sources",
-                    "Manipulated data",
-                    "Emotional language"
-                ],
-                verifiedFacts: [
-                    "Original source not cited",
-                    "Claims contradict official records",
-                    "Images are out of context"
-                ],
-                recommendedSources: [
-                    "Reuters Fact Check",
-                    "Associated Press",
-                    "Official Government Data"
-                ]
-            };
-            setResult(mockResult);
-        } catch (error) {
-            console.error('Error:', error);
-            showToast('Failed to analyze article', 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleSaveArticle = () => {
+    if (article) {
+      const articleToSave = {
+        title: article.title,
+        content: article.content?.substring(0, 200) + '...',
+        url: article.url,
+        source: article.source,
+        credibilityScore: credibilityScore,
+        image: article.top_image
+      };
+      
+      saveArticle(articleToSave);
+    }
+  };
 
-    const getCredibilityColor = (score) => {
-        if (score >= 70) return '#4CAF50';
-        if (score >= 40) return '#FFB020';
-        return '#FF4842';
-    };
+  const handleViewOriginal = () => {
+    if (article && article.url) {
+      navigation.navigate('WebView', { url: article.url });
+    }
+  };
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <ScrollView style={styles.scrollView}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Fact Check</Text>
-                    <Text style={styles.headerSubtitle}>Verify news articles for misinformation</Text>
+  const getCredibilityColor = (score) => {
+    if (score >= 80) return '#4CAF50';
+    if (score >= 60) return '#FFC107';
+    return '#FF4842';
+  };
+
+  const getCredibilityLabel = (score) => {
+    if (score >= 80) return 'Highly Credible';
+    if (score >= 60) return 'Somewhat Credible';
+    if (score >= 40) return 'Questionable';
+    return 'Not Credible';
+  };
+
+  return (
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+    >
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Feather name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>URL Verification</Text>
+        </View>
+        
+        <View style={styles.searchContainer}>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter article URL..."
+              placeholderTextColor="#8f8e8e"
+              value={url}
+              onChangeText={setUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={() => setUrl('')}
+            >
+              <Feather name="x" size={20} color="#8f8e8e" />
+            </TouchableOpacity>
+          </View>
+          
+          <TouchableOpacity
+            style={styles.verifyButton}
+            onPress={handleVerify}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.verifyButtonText}>VERIFY</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+        
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Feather name="alert-circle" size={40} color="#FF4842" />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : article ? (
+          <View style={styles.resultContainer}>
+            <Text style={styles.articleTitle}>{article.title}</Text>
+            
+            {article.source && (
+              <Text style={styles.articleSource}>Source: {article.source}</Text>
+            )}
+            
+            {credibilityScore !== null && (
+              <View style={styles.credibilityContainer}>
+                <Text style={styles.credibilityLabel}>Credibility Score:</Text>
+                <View style={styles.scoreContainer}>
+                  <View 
+                    style={[
+                      styles.scoreBar, 
+                      { width: `${credibilityScore}%`, backgroundColor: getCredibilityColor(credibilityScore) }
+                    ]}
+                  />
+                  <Text style={styles.scoreText}>{credibilityScore}%</Text>
                 </View>
-
-                <View style={styles.inputContainer}>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Paste article URL here"
-                        placeholderTextColor="#666666"
-                        value={url}
-                        onChangeText={setUrl}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
-                    <TouchableOpacity 
-                        style={styles.verifyButton}
-                        onPress={handleVerify}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#FFFFFF" />
-                        ) : (
-                            <Text style={styles.verifyButtonText}>Analyze Article</Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
-
-                {result && (
-                    <View style={styles.resultContainer}>
-                        <Image
-                            source={{ uri: result.imageUrl }}
-                            style={styles.articleImage}
-                        />
-                        <View style={styles.articleContent}>
-                            <View style={styles.credibilitySection}>
-                                <Text style={styles.sectionTitle}>Credibility Score</Text>
-                                <View style={[styles.credibilityBadge, { backgroundColor: getCredibilityColor(result.credibilityScore) }]}>
-                                    <Text style={styles.credibilityScore}>{result.credibilityScore}%</Text>
-                                </View>
-                                <Text style={[styles.credibilityLabel, { color: getCredibilityColor(result.credibilityScore) }]}>
-                                    {result.credibilityScore >= 70 ? 'Likely True' : 
-                                     result.credibilityScore >= 40 ? 'Potentially Misleading' : 
-                                     'Likely False'}
-                                </Text>
-                            </View>
-
-                            <View style={styles.warningSection}>
-                                <Text style={styles.sectionTitle}>Warning Flags</Text>
-                                {result.warningFlags.map((flag, index) => (
-                                    <View key={index} style={styles.flagItem}>
-                                        <Feather name="alert-triangle" size={16} color="#FFB020" />
-                                        <Text style={styles.flagText}>{flag}</Text>
-                                    </View>
-                                ))}
-                            </View>
-
-                            <View style={styles.factsSection}>
-                                <Text style={styles.sectionTitle}>Fact Check Results</Text>
-                                {result.verifiedFacts.map((fact, index) => (
-                                    <View key={index} style={styles.factItem}>
-                                        <Feather name="x-circle" size={16} color="#FF4842" />
-                                        <Text style={styles.factText}>{fact}</Text>
-                                    </View>
-                                ))}
-                            </View>
-
-                            <View style={styles.sourcesSection}>
-                                <Text style={styles.sectionTitle}>Recommended Sources</Text>
-                                {result.recommendedSources.map((source, index) => (
-                                    <View key={index} style={styles.sourceItem}>
-                                        <Feather name="check-circle" size={16} color="#4CAF50" />
-                                        <Text style={styles.sourceText}>{source}</Text>
-                                    </View>
-                                ))}
-                            </View>
-
-                            <TouchableOpacity 
-                                style={styles.saveButton}
-                                onPress={() => {
-                                    if (savedArticlesContext.isArticleSaved(result.id)) {
-                                        savedArticlesContext.removeArticle(result.id);
-                                        showToast('Analysis removed from saved');
-                                    } else {
-                                        savedArticlesContext.saveArticle(result);
-                                        showToast('Analysis saved successfully');
-                                    }
-                                }}
-                            >
-                                <Feather 
-                                    name="bookmark"
-                                    size={20} 
-                                    color={savedArticlesContext.isArticleSaved(result.id) ? "#3168d8" : "rgba(255,255,255,0.2)"} 
-                                />
-                                <Text style={styles.saveButtonText}>
-                                    {savedArticlesContext.isArticleSaved(result.id) ? 'Saved' : 'Save Analysis'}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-            </ScrollView>
-        </SafeAreaView>
-    );
+                <Text style={[styles.credibilityText, { color: getCredibilityColor(credibilityScore) }]}>
+                  {getCredibilityLabel(credibilityScore)}
+                </Text>
+              </View>
+            )}
+            
+            <View style={styles.contentPreview}>
+              <Text style={styles.contentLabel}>Article Preview:</Text>
+              <Text style={styles.contentText}>
+                {article.content?.substring(0, 300)}...
+              </Text>
+            </View>
+            
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleSaveArticle}
+              >
+                <Feather 
+                  name={isArticleSaved(article.url) ? "bookmark" : "bookmark-plus"} 
+                  size={20} 
+                  color="#FFFFFF" 
+                />
+                <Text style={styles.actionButtonText}>
+                  {isArticleSaved(article.url) ? "SAVED" : "SAVE"}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleViewOriginal}
+              >
+                <Feather name="external-link" size={20} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>VIEW ORIGINAL</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+      
+      <LoadingOverlay 
+        visible={isLoading} 
+        message="Verifying article... This may take a moment."
+      />
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#1c2120',
-    },
-    scrollView: {
-        flex: 1,
-    },
-    header: {
-        paddingTop: Platform.OS === 'ios' ? 60 : 40,
-        paddingHorizontal: 20,
-        paddingBottom: 20,
-    },
-    headerTitle: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: '#FFFFFF',
-        fontFamily: 'Poppins',
-    },
-    headerSubtitle: {
-        fontSize: 16,
-        color: '#666666',
-        fontFamily: 'Poppins',
-        marginTop: 4,
-    },
-    inputContainer: {
-        marginHorizontal: 20,
-        marginTop: 20,
-    },
-    input: {
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 12,
-        padding: 15,
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontFamily: 'Poppins',
-        marginBottom: 15,
-    },
-    verifyButton: {
-        backgroundColor: '#3168d8',
-        borderRadius: 12,
-        padding: 15,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    verifyButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-        fontFamily: 'Poppins',
-    },
-    resultContainer: {
-        margin: 20,
-        borderRadius: 16,
-        overflow: 'hidden',
-        backgroundColor: 'rgba(255,255,255,0.08)',
-    },
-    articleImage: {
-        width: '100%',
-        height: 200,
-    },
-    articleContent: {
-        padding: 20,
-    },
-    credibilitySection: {
-        alignItems: 'center',
-        marginBottom: 25,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#FFFFFF',
-        fontFamily: 'Poppins',
-        marginBottom: 15,
-    },
-    credibilityBadge: {
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 20,
-        marginVertical: 10,
-    },
-    credibilityScore: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#FFFFFF',
-        fontFamily: 'Poppins',
-    },
-    credibilityLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        fontFamily: 'Poppins',
-    },
-    warningSection: {
-        marginBottom: 25,
-    },
-    flagItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    flagText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontFamily: 'Poppins',
-        marginLeft: 10,
-    },
-    factsSection: {
-        marginBottom: 25,
-    },
-    factItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    factText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontFamily: 'Poppins',
-        marginLeft: 10,
-    },
-    sourcesSection: {
-        marginBottom: 25,
-    },
-    sourceItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    sourceText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontFamily: 'Poppins',
-        marginLeft: 10,
-    },
-    saveButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(49,104,216,0.1)',
-        borderRadius: 12,
-        padding: 15,
-    },
-    saveButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-        fontFamily: 'Poppins',
-        marginLeft: 10,
-    },
-}); 
+  container: {
+    flex: 1,
+    backgroundColor: '#1c2120',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: Platform.OS === 'android' ? 40 : 60,
+  },
+  backButton: {
+    marginRight: 15,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: 'Poppins',
+  },
+  searchContainer: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+  },
+  input: {
+    flex: 1,
+    height: 50,
+    color: '#333333',
+    fontFamily: 'Poppins',
+  },
+  clearButton: {
+    padding: 10,
+  },
+  verifyButton: {
+    backgroundColor: '#3168d8',
+    height: 50,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifyButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+    fontSize: 16,
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#FF4842',
+    fontFamily: 'Poppins',
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  resultContainer: {
+    padding: 20,
+  },
+  articleTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: 'Poppins',
+    marginBottom: 10,
+  },
+  articleSource: {
+    fontSize: 14,
+    color: '#8f8e8e',
+    fontFamily: 'Poppins',
+    marginBottom: 20,
+  },
+  credibilityContainer: {
+    marginBottom: 20,
+  },
+  credibilityLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: 'Poppins',
+    marginBottom: 10,
+  },
+  scoreContainer: {
+    height: 30,
+    backgroundColor: '#2b2f2e',
+    borderRadius: 15,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 10,
+  },
+  scoreBar: {
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  scoreText: {
+    position: 'absolute',
+    right: 10,
+    top: 5,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontFamily: 'Poppins',
+  },
+  credibilityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+    textAlign: 'right',
+  },
+  contentPreview: {
+    marginBottom: 20,
+  },
+  contentLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: 'Poppins',
+    marginBottom: 10,
+  },
+  contentText: {
+    fontSize: 14,
+    color: '#CCCCCC',
+    fontFamily: 'Poppins',
+    lineHeight: 22,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3168d8',
+    borderRadius: 8,
+    padding: 15,
+    flex: 0.48,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+});

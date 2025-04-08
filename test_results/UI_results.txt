@@ -1,0 +1,78 @@
+🔍 Testing UI Components...
+
+Found 16 screen components to test
+
+Test 1: ChangePassword
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 2: HomePage
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 3: HomeScreen
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 4: NotificationsPage
+❌ Invalid component structure
+
+Test 5: NotificationsScreen
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 6: Onboarding
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 7: OnboardingScreen
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 8: ProfilePage
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 9: SavedArticlesPage
+✅ Component structure is valid
+   No issues found
+
+Test 10: SavedArticlesScreen
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 11: SignIn
+✅ Component structure is valid
+   No issues found
+
+Test 12: SignUp
+✅ Component structure is valid
+   No issues found
+
+Test 13: TestMenuScreen
+✅ Component structure is valid
+   No issues found
+
+Test 14: TestScreen
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 15: URLSearchPage
+✅ Component structure is valid
+⚠️ Potential issues found:
+   - Using useState without importing it
+
+Test 16: WebViewScreen
+✅ Component structure is valid
+   No issues found
+
+🔍 UI Component Tests completed!

@@ -1,0 +1,33 @@
+🔍 Testing Credibility Service...
+
+Test 1: Analyzing "Scientists discover new treatment for cancer"
+✅ Credibility score: 67%
+   Factors contributing to score:
+   - sourceReputation: 50
+   - clickbaitLevel: 100
+   - sentimentBalance: 50
+   - extremeLanguageUse: 100
+   - contentDepth: 20
+   Classification: Somewhat Credible
+
+Test 2: Analyzing "SHOCKING: Government hiding alien technology!!!"
+✅ Credibility score: 55%
+   Factors contributing to score:
+   - sourceReputation: 50
+   - clickbaitLevel: 60
+   - sentimentBalance: 50
+   - extremeLanguageUse: 87
+   - contentDepth: 20
+   Classification: Questionable
+
+Test 3: Analyzing "Study suggests moderate coffee consumption may have health benefits"
+✅ Credibility score: 66%
+   Factors contributing to score:
+   - sourceReputation: 50
+   - clickbaitLevel: 100
+   - sentimentBalance: 50
+   - extremeLanguageUse: 90
+   - contentDepth: 20
+   Classification: Somewhat Credible
+
+🔍 Credibility Service Tests completed!
